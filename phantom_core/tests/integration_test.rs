@@ -4,17 +4,14 @@
 // These test the entire TCB working together, not individual units.
 // =============================================================================
 
-use phantom_core::memory::SecretBytes;
 use phantom_core::crypto::{
-    Argon2Params, CipherChoice,
-    derive_master_key, derive_session_key, derive_subkey,
-    encrypt_aes_gcm_siv, decrypt_aes_gcm_siv,
-    generate_random_bytes,
-    ARGON2_SALT_LEN, SESSION_NONCE_LEN,
+    decrypt_aes_gcm_siv, derive_master_key, derive_session_key, derive_subkey, encrypt_aes_gcm_siv,
+    generate_random_bytes, Argon2Params, CipherChoice, ARGON2_SALT_LEN, SESSION_NONCE_LEN,
 };
 use phantom_core::header::{VaultHeader, HEADER_SIZE};
 use phantom_core::hmac::{chain_hmac, HMAC_OUTPUT_LEN};
-use phantom_core::shamir::{split_secret, reconstruct_secret};
+use phantom_core::memory::SecretBytes;
+use phantom_core::shamir::{reconstruct_secret, split_secret};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Test params — minimal Argon2id for speed in tests
@@ -80,7 +77,10 @@ fn integration_wrong_password_cannot_decrypt() {
     let (session_wrong, _) = derive_session_key(master_wrong, &vault_id, &session_nonce).unwrap();
     let result = decrypt_aes_gcm_siv(&session_wrong, &ciphertext, b"aad");
 
-    assert!(result.is_err(), "Wrong password must not decrypt successfully");
+    assert!(
+        result.is_err(),
+        "Wrong password must not decrypt successfully"
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -195,11 +195,7 @@ fn integration_shamir_full_recovery_cycle() {
     assert_eq!(shares.len(), 5);
 
     // Reconstruct from shares 1, 3, 5 (indices 0, 2, 4)
-    let selected = vec![
-        shares[0].clone(),
-        shares[2].clone(),
-        shares[4].clone(),
-    ];
+    let selected = vec![shares[0].clone(), shares[2].clone(), shares[4].clone()];
     let reconstructed = reconstruct_secret(&selected, 3).unwrap();
 
     // Reconstructed key must equal original
@@ -222,7 +218,10 @@ fn integration_shamir_insufficient_shares_cannot_recover() {
     // Only 2 shares — threshold is 3 — must fail
     let two_shares = vec![shares[0].clone(), shares[1].clone()];
     let result = reconstruct_secret(&two_shares, 3);
-    assert!(result.is_err(), "2 shares must not reconstruct when threshold is 3");
+    assert!(
+        result.is_err(),
+        "2 shares must not reconstruct when threshold is 3"
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

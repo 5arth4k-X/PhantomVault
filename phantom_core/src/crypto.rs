@@ -93,15 +93,11 @@
 use std::fmt;
 
 use aes_gcm_siv::{
-    aead::{Aead,KeyInit},
-    Aes256GcmSiv,
-    Nonce as GcmSivNonce,
+    aead::{Aead, KeyInit},
+    Aes256GcmSiv, Nonce as GcmSivNonce,
 };
-use chacha20poly1305::{
-    ChaCha20Poly1305,
-    Nonce as ChaChaNonce,
-};
-use argon2::{Argon2, Algorithm, Params, Version};
+use argon2::{Algorithm, Argon2, Params, Version};
+use chacha20poly1305::{ChaCha20Poly1305, Nonce as ChaChaNonce};
 use hkdf::Hkdf;
 use sha2::Sha256;
 
@@ -204,7 +200,11 @@ pub enum CryptoError {
 impl fmt::Display for CryptoError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            CryptoError::Argon2ParamBelowMinimum { param, minimum, got } => {
+            CryptoError::Argon2ParamBelowMinimum {
+                param,
+                minimum,
+                got,
+            } => {
                 write!(
                     f,
                     "KDF parameter '{}' is below the security minimum \
@@ -222,10 +222,7 @@ impl fmt::Display for CryptoError {
             CryptoError::DecryptionFailed => {
                 // Generic message — do not reveal if it was a wrong key
                 // or corrupted data. Either leak could help an attacker.
-                write!(
-                    f,
-                    "Incorrect password or vault data is corrupted."
-                )
+                write!(f, "Incorrect password or vault data is corrupted.")
             }
             CryptoError::HkdfFailed { detail } => {
                 write!(f, "Key derivation (HKDF) failed: {}", detail)
@@ -247,7 +244,11 @@ impl fmt::Display for CryptoError {
                 write!(f, "Invalid key length: expected {}, got {}", expected, got)
             }
             CryptoError::InvalidNonceLength { expected, got } => {
-                write!(f, "Invalid nonce length: expected {}, got {}", expected, got)
+                write!(
+                    f,
+                    "Invalid nonce length: expected {}, got {}",
+                    expected, got
+                )
             }
         }
     }
@@ -349,7 +350,11 @@ impl Argon2Params {
                 got: p_cost,
             });
         }
-        Ok(Self { t_cost, m_cost, p_cost })
+        Ok(Self {
+            t_cost,
+            m_cost,
+            p_cost,
+        })
     }
 
     /// Returns the default secure parameters.
@@ -424,11 +429,7 @@ pub fn derive_master_key(
 
     // Run the derivation.
     // This is the expensive operation (2-5 seconds with default params).
-    let result = argon2.hash_password_into(
-        password.expose_secret(),
-        salt.as_slice(),
-        &mut output,
-    );
+    let result = argon2.hash_password_into(password.expose_secret(), salt.as_slice(), &mut output);
 
     // Zero the password NOW — before checking the result.
     // Even if Argon2 failed, the password must be zeroed.
@@ -445,8 +446,7 @@ pub fn derive_master_key(
 
     // Wrap the output in SecretBytes immediately.
     // The output Vec is consumed — no copy made.
-    let (master_key, mlock_warning) = SecretBytes::new(output)
-        .map_err(CryptoError::from)?;
+    let (master_key, mlock_warning) = SecretBytes::new(output).map_err(CryptoError::from)?;
 
     Ok((master_key, MlockStatus::from(mlock_warning)))
 }
@@ -496,8 +496,8 @@ pub fn derive_session_key(
     // info: session_nonce — unique per unlock, provides forward secrecy
     //       NO TIMESTAMP — CSPRNG only (F-02 fix)
     let hkdf = Hkdf::<Sha256>::new(
-        Some(vault_id.as_slice()),   // salt
-        master_key.expose_secret(),  // IKM
+        Some(vault_id.as_slice()),  // salt
+        master_key.expose_secret(), // IKM
     );
 
     let mut output = vec![0u8; KEY_LEN];
@@ -522,8 +522,7 @@ pub fn derive_session_key(
         });
     }
 
-    let (session_key, mlock_warning) = SecretBytes::new(output)
-        .map_err(CryptoError::from)?;
+    let (session_key, mlock_warning) = SecretBytes::new(output).map_err(CryptoError::from)?;
 
     Ok((session_key, MlockStatus::from(mlock_warning)))
 }
@@ -558,8 +557,8 @@ pub fn derive_subkey(
     purpose: &[u8],
 ) -> Result<(SecretBytes, MlockStatus), CryptoError> {
     let hkdf = Hkdf::<Sha256>::new(
-        Some(vault_id.as_slice()),   // salt
-        master_key.expose_secret(),  // IKM
+        Some(vault_id.as_slice()),  // salt
+        master_key.expose_secret(), // IKM
     );
 
     let mut output = vec![0u8; KEY_LEN];
@@ -576,8 +575,7 @@ pub fn derive_subkey(
         });
     }
 
-    let (subkey, mlock_warning) = SecretBytes::new(output)
-        .map_err(CryptoError::from)?;
+    let (subkey, mlock_warning) = SecretBytes::new(output).map_err(CryptoError::from)?;
 
     Ok((subkey, MlockStatus::from(mlock_warning)))
 }
@@ -639,10 +637,11 @@ pub fn encrypt_aes_gcm_siv(
     let nonce = GcmSivNonce::from_slice(&nonce_bytes);
 
     // Initialise AES-256-GCM-SIV with the key.
-    let cipher = Aes256GcmSiv::new_from_slice(key.expose_secret())
-        .map_err(|e| CryptoError::EncryptionFailed {
+    let cipher = Aes256GcmSiv::new_from_slice(key.expose_secret()).map_err(|e| {
+        CryptoError::EncryptionFailed {
             detail: format!("Failed to initialise AES-256-GCM-SIV: {}", e),
-        })?;
+        }
+    })?;
 
     // Build the aead::Payload including AAD.
     let payload = aes_gcm_siv::aead::Payload {
@@ -781,10 +780,11 @@ pub fn encrypt_chacha20(
     let nonce_bytes = construct_chacha_nonce(nonce_base, write_counter)?;
     let nonce = ChaChaNonce::from_slice(&nonce_bytes);
 
-    let cipher = ChaCha20Poly1305::new_from_slice(key.expose_secret())
-        .map_err(|e| CryptoError::EncryptionFailed {
+    let cipher = ChaCha20Poly1305::new_from_slice(key.expose_secret()).map_err(|e| {
+        CryptoError::EncryptionFailed {
             detail: format!("Failed to initialise ChaCha20-Poly1305: {}", e),
-        })?;
+        }
+    })?;
 
     let payload = chacha20poly1305::aead::Payload {
         msg: plaintext,
@@ -899,9 +899,7 @@ pub fn encrypt(
     write_counter: Option<u64>,
 ) -> Result<Vec<u8>, CryptoError> {
     match cipher {
-        CipherChoice::AesGcmSiv => {
-            encrypt_aes_gcm_siv(key, plaintext, aad)
-        }
+        CipherChoice::AesGcmSiv => encrypt_aes_gcm_siv(key, plaintext, aad),
         CipherChoice::ChaCha20Poly1305 => {
             let base = nonce_base.ok_or_else(|| CryptoError::EncryptionFailed {
                 detail: "ChaCha20 requires nonce_base".to_string(),
@@ -924,9 +922,7 @@ pub fn decrypt(
     write_counter: Option<u64>,
 ) -> Result<Vec<u8>, CryptoError> {
     match cipher {
-        CipherChoice::AesGcmSiv => {
-            decrypt_aes_gcm_siv(key, ciphertext, aad)
-        }
+        CipherChoice::AesGcmSiv => decrypt_aes_gcm_siv(key, ciphertext, aad),
         CipherChoice::ChaCha20Poly1305 => {
             let base = nonce_base.ok_or(CryptoError::DecryptionFailed)?;
             let counter = write_counter.ok_or(CryptoError::DecryptionFailed)?;
@@ -1329,8 +1325,7 @@ mod tests {
     #[test]
     fn test_chacha20_wrong_counter_fails() {
         let (key, nonce_base, counter) = make_chacha_setup();
-        let ciphertext =
-            encrypt_chacha20(&key, &nonce_base, counter, b"data", b"aad").unwrap();
+        let ciphertext = encrypt_chacha20(&key, &nonce_base, counter, b"data", b"aad").unwrap();
 
         // Decrypting with a different counter (different nonce) must fail.
         let result = decrypt_chacha20(&key, &nonce_base, counter + 1, &ciphertext, b"aad");
@@ -1422,13 +1417,23 @@ mod tests {
     fn test_unified_encrypt_decrypt_aes() {
         let key = make_test_key();
         let ciphertext = encrypt(
-            CipherChoice::AesGcmSiv, &key, b"unified test", b"aad",
-            None, None,
-        ).unwrap();
+            CipherChoice::AesGcmSiv,
+            &key,
+            b"unified test",
+            b"aad",
+            None,
+            None,
+        )
+        .unwrap();
         let plaintext = decrypt(
-            CipherChoice::AesGcmSiv, &key, &ciphertext, b"aad",
-            None, None,
-        ).unwrap();
+            CipherChoice::AesGcmSiv,
+            &key,
+            &ciphertext,
+            b"aad",
+            None,
+            None,
+        )
+        .unwrap();
         assert_eq!(plaintext.as_slice(), b"unified test");
     }
 
@@ -1436,13 +1441,23 @@ mod tests {
     fn test_unified_encrypt_decrypt_chacha() {
         let (key, nonce_base, counter) = make_chacha_setup();
         let ciphertext = encrypt(
-            CipherChoice::ChaCha20Poly1305, &key, b"chacha unified", b"aad",
-            Some(&nonce_base), Some(counter),
-        ).unwrap();
+            CipherChoice::ChaCha20Poly1305,
+            &key,
+            b"chacha unified",
+            b"aad",
+            Some(&nonce_base),
+            Some(counter),
+        )
+        .unwrap();
         let plaintext = decrypt(
-            CipherChoice::ChaCha20Poly1305, &key, &ciphertext, b"aad",
-            Some(&nonce_base), Some(counter),
-        ).unwrap();
+            CipherChoice::ChaCha20Poly1305,
+            &key,
+            &ciphertext,
+            b"aad",
+            Some(&nonce_base),
+            Some(counter),
+        )
+        .unwrap();
         assert_eq!(plaintext.as_slice(), b"chacha unified");
     }
 

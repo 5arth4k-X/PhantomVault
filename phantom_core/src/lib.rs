@@ -26,31 +26,28 @@
 // =============================================================================
 
 use std::collections::HashMap;
-use std::sync::{Mutex, OnceLock};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, OnceLock};
 
-use pyo3::prelude::*;
 use pyo3::exceptions::PyRuntimeError;
+use pyo3::prelude::*;
 
-pub mod memory;
 pub mod crypto;
 pub mod header;
-pub mod input;
 pub mod hmac;
+pub mod input;
+pub mod memory;
 pub mod shamir;
 
-use crate::memory::SecretBytes;
 use crate::crypto::{
-    Argon2Params, CipherChoice,
-    derive_master_key, derive_session_key, derive_subkey,
-    encrypt, decrypt,
-    generate_random_bytes, generate_random_vec,
-    KEY_LEN, SESSION_NONCE_LEN,
+    decrypt, derive_master_key, derive_session_key, derive_subkey, encrypt, generate_random_bytes,
+    generate_random_vec, Argon2Params, CipherChoice, KEY_LEN, SESSION_NONCE_LEN,
 };
 use crate::header::{VaultHeader, HEADER_SIZE};
-use crate::input::{read_password, read_password_twice};
 use crate::hmac as hmac_mod;
-use crate::shamir::{split_secret, reconstruct_secret, ShamirShare, SECRET_LEN};
+use crate::input::{read_password, read_password_twice};
+use crate::memory::SecretBytes;
+use crate::shamir::{reconstruct_secret, split_secret, ShamirShare, SECRET_LEN};
 
 // =============================================================================
 // SESSION STORE
@@ -91,7 +88,9 @@ fn vec_to_arr<const N: usize>(v: &[u8], name: &str) -> PyResult<[u8; N]> {
     if v.len() != N {
         return Err(to_py_err(format!(
             "{} must be {} bytes, got {}",
-            name, N, v.len()
+            name,
+            N,
+            v.len()
         )));
     }
     let mut arr = [0u8; N];
@@ -120,51 +119,55 @@ fn unlock_vault(
     prompt: &str,
 ) -> PyResult<u64> {
     let vault_id = vec_to_arr::<16>(&vault_id_bytes, "vault_id")?;
-    let salt     = vec_to_arr::<16>(&salt_bytes, "salt")?;
+    let salt = vec_to_arr::<16>(&salt_bytes, "salt")?;
     let nonce_base = vec_to_arr::<24>(&nonce_base_bytes, "nonce_base")?;
 
     let cipher = CipherChoice::from_header_byte(cipher_byte)
         .ok_or_else(|| to_py_err(format!("Unknown cipher byte: 0x{:02X}", cipher_byte)))?;
 
-    let params = Argon2Params::new(t_cost, m_cost, p_cost)
-        .map_err(to_py_err)?;
+    let params = Argon2Params::new(t_cost, m_cost, p_cost).map_err(to_py_err)?;
 
     // Read password from TTY — Python never holds it.
-    let (password, mlock_warning) = read_password(prompt)
-        .map_err(to_py_err)?;
+    let (password, mlock_warning) = read_password(prompt).map_err(to_py_err)?;
 
     if let crate::memory::MlockStatus::Unlocked { ref warning } = mlock_warning {
         eprintln!("WARNING: {}", warning);
     }
 
     // Derive master key from password.
-    let (master_key, _) = derive_master_key(password, &salt, &params)
-        .map_err(to_py_err)?;
+    let (master_key, _) = derive_master_key(password, &salt, &params).map_err(to_py_err)?;
 
     // Derive header auth key and verify header HMAC.
-    let (header_key, _) = derive_subkey(&master_key, &vault_id, b"header-auth-key-v1")
-        .map_err(to_py_err)?;
+    let (header_key, _) =
+        derive_subkey(&master_key, &vault_id, b"header-auth-key-v1").map_err(to_py_err)?;
 
     if raw_header_bytes.len() == HEADER_SIZE {
         let raw_arr = vec_to_arr::<HEADER_SIZE>(&raw_header_bytes, "raw_header")?;
-        let parsed = VaultHeader::deserialize(&raw_arr)
-            .map_err(to_py_err)?;
-        parsed.verify_hmac_raw(&raw_arr, &header_key)
+        let parsed = VaultHeader::deserialize(&raw_arr).map_err(to_py_err)?;
+        parsed
+            .verify_hmac_raw(&raw_arr, &header_key)
             .map_err(|_| to_py_err("Incorrect password or vault is corrupted."))?;
     }
     drop(header_key);
 
     // Derive ephemeral session key. Master key zeroed inside this call.
-    let session_nonce = generate_random_bytes::<SESSION_NONCE_LEN>()
-        .map_err(to_py_err)?;
-    let (session_key, _) = derive_session_key(master_key, &vault_id, &session_nonce)
-        .map_err(to_py_err)?;
+    let session_nonce = generate_random_bytes::<SESSION_NONCE_LEN>().map_err(to_py_err)?;
+    let (session_key, _) =
+        derive_session_key(master_key, &vault_id, &session_nonce).map_err(to_py_err)?;
 
     let handle = next_handle();
     session_store()
         .lock()
         .map_err(|_| to_py_err("Session store lock poisoned"))?
-        .insert(handle, Session { key: session_key, cipher, vault_id, nonce_base });
+        .insert(
+            handle,
+            Session {
+                key: session_key,
+                cipher,
+                vault_id,
+                nonce_base,
+            },
+        );
 
     Ok(handle)
 }
@@ -183,51 +186,55 @@ fn create_vault(
     let cipher = CipherChoice::from_header_byte(cipher_byte)
         .ok_or_else(|| to_py_err(format!("Unknown cipher byte: 0x{:02X}", cipher_byte)))?;
 
-    let params = Argon2Params::new(t_cost, m_cost, p_cost)
-        .map_err(to_py_err)?;
+    let params = Argon2Params::new(t_cost, m_cost, p_cost).map_err(to_py_err)?;
 
     // Read and confirm password — Python never holds it.
-    let (password, mlock_warning) = read_password_twice(prompt_first, prompt_second)
-        .map_err(to_py_err)?;
+    let (password, mlock_warning) =
+        read_password_twice(prompt_first, prompt_second).map_err(to_py_err)?;
 
     if let crate::memory::MlockStatus::Unlocked { ref warning } = mlock_warning {
         eprintln!("WARNING: {}", warning);
     }
 
     // Generate vault header with fresh random vault_id, salt, nonce_base.
-    let mut vault_header = VaultHeader::new(cipher, params)
-        .map_err(to_py_err)?;
+    let mut vault_header = VaultHeader::new(cipher, params).map_err(to_py_err)?;
 
-    let vault_id   = vault_header.vault_id;
-    let salt       = vault_header.argon2_salt;
+    let vault_id = vault_header.vault_id;
+    let salt = vault_header.argon2_salt;
     let nonce_base = vault_header.chacha20_nonce_base;
 
     // Derive master key.
-    let (master_key, _) = derive_master_key(password, &salt, &vault_header.argon2_params)
-        .map_err(to_py_err)?;
+    let (master_key, _) =
+        derive_master_key(password, &salt, &vault_header.argon2_params).map_err(to_py_err)?;
 
     // Derive header auth key, compute and store HMAC.
-    let (header_key, _) = derive_subkey(&master_key, &vault_id, b"header-auth-key-v1")
-        .map_err(to_py_err)?;
-    vault_header.compute_and_store_hmac(&header_key)
+    let (header_key, _) =
+        derive_subkey(&master_key, &vault_id, b"header-auth-key-v1").map_err(to_py_err)?;
+    vault_header
+        .compute_and_store_hmac(&header_key)
         .map_err(to_py_err)?;
     drop(header_key);
 
     // Derive session key. Master key zeroed inside.
-    let session_nonce = generate_random_bytes::<SESSION_NONCE_LEN>()
-        .map_err(to_py_err)?;
-    let (session_key, _) = derive_session_key(master_key, &vault_id, &session_nonce)
-        .map_err(to_py_err)?;
+    let session_nonce = generate_random_bytes::<SESSION_NONCE_LEN>().map_err(to_py_err)?;
+    let (session_key, _) =
+        derive_session_key(master_key, &vault_id, &session_nonce).map_err(to_py_err)?;
 
     let handle = next_handle();
     session_store()
         .lock()
         .map_err(|_| to_py_err("Session store lock poisoned"))?
-        .insert(handle, Session { key: session_key, cipher, vault_id, nonce_base });
+        .insert(
+            handle,
+            Session {
+                key: session_key,
+                cipher,
+                vault_id,
+                nonce_base,
+            },
+        );
 
-    let header_bytes = vault_header.serialize()
-        .map_err(to_py_err)?
-        .to_vec();
+    let header_bytes = vault_header.serialize().map_err(to_py_err)?.to_vec();
 
     Ok((handle, header_bytes))
 }
@@ -245,11 +252,19 @@ fn encrypt_data(
         .lock()
         .map_err(|_| to_py_err("Session store lock poisoned"))?;
 
-    let s = store.get(&handle)
+    let s = store
+        .get(&handle)
         .ok_or_else(|| to_py_err("Invalid or expired session handle"))?;
 
-    encrypt(s.cipher, &s.key, &plaintext, &aad, Some(&s.nonce_base), write_counter)
-        .map_err(to_py_err)
+    encrypt(
+        s.cipher,
+        &s.key,
+        &plaintext,
+        &aad,
+        Some(&s.nonce_base),
+        write_counter,
+    )
+    .map_err(to_py_err)
 }
 
 /// Decrypt ciphertext using the session key identified by handle.
@@ -265,11 +280,19 @@ fn decrypt_data(
         .lock()
         .map_err(|_| to_py_err("Session store lock poisoned"))?;
 
-    let s = store.get(&handle)
+    let s = store
+        .get(&handle)
         .ok_or_else(|| to_py_err("Invalid or expired session handle"))?;
 
-    decrypt(s.cipher, &s.key, &ciphertext, &aad, Some(&s.nonce_base), write_counter)
-        .map_err(to_py_err)
+    decrypt(
+        s.cipher,
+        &s.key,
+        &ciphertext,
+        &aad,
+        Some(&s.nonce_base),
+        write_counter,
+    )
+    .map_err(to_py_err)
 }
 
 /// Lock a vault: zero the session key and remove the handle.
@@ -308,14 +331,12 @@ fn session_active(handle: u64) -> PyResult<bool> {
 /// Split a 32-byte secret into Shamir shares.
 /// Returns list of share byte arrays.
 #[pyfunction]
-fn shamir_split(
-    secret_bytes: Vec<u8>,
-    threshold: u8,
-    total_shares: u8,
-) -> PyResult<Vec<Vec<u8>>> {
+fn shamir_split(secret_bytes: Vec<u8>, threshold: u8, total_shares: u8) -> PyResult<Vec<Vec<u8>>> {
     if secret_bytes.len() != SECRET_LEN {
         return Err(to_py_err(format!(
-            "Secret must be {} bytes, got {}", SECRET_LEN, secret_bytes.len()
+            "Secret must be {} bytes, got {}",
+            SECRET_LEN,
+            secret_bytes.len()
         )));
     }
     let (secret, _) = SecretBytes::new(secret_bytes).map_err(to_py_err)?;
@@ -326,10 +347,7 @@ fn shamir_split(
 /// Reconstruct a secret from Shamir shares.
 /// Returns 32 secret bytes.
 #[pyfunction]
-fn shamir_reconstruct(
-    share_bytes_list: Vec<Vec<u8>>,
-    threshold: u8,
-) -> PyResult<Vec<u8>> {
+fn shamir_reconstruct(share_bytes_list: Vec<Vec<u8>>, threshold: u8) -> PyResult<Vec<u8>> {
     let shares: Vec<ShamirShare> = share_bytes_list
         .into_iter()
         .map(ShamirShare::from_bytes)
@@ -343,7 +361,9 @@ fn shamir_reconstruct(
 fn compute_hmac(key_bytes: Vec<u8>, data: Vec<u8>) -> PyResult<Vec<u8>> {
     if key_bytes.len() != KEY_LEN {
         return Err(to_py_err(format!(
-            "HMAC key must be {} bytes, got {}", KEY_LEN, key_bytes.len()
+            "HMAC key must be {} bytes, got {}",
+            KEY_LEN,
+            key_bytes.len()
         )));
     }
     let (key, _) = SecretBytes::new(key_bytes).map_err(to_py_err)?;
@@ -353,11 +373,7 @@ fn compute_hmac(key_bytes: Vec<u8>, data: Vec<u8>) -> PyResult<Vec<u8>> {
 
 /// Compute a chained HMAC for audit log entries.
 #[pyfunction]
-fn chain_hmac(
-    key_bytes: Vec<u8>,
-    entry_data: Vec<u8>,
-    prev_hmac: Vec<u8>,
-) -> PyResult<Vec<u8>> {
+fn chain_hmac(key_bytes: Vec<u8>, entry_data: Vec<u8>, prev_hmac: Vec<u8>) -> PyResult<Vec<u8>> {
     if key_bytes.len() != KEY_LEN {
         return Err(to_py_err("HMAC key must be 32 bytes"));
     }

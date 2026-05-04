@@ -103,9 +103,7 @@ pub enum MemoryError {
 
     /// munlock() failed during SecretBytes drop.
     /// Logged internally but not propagated (drop cannot return errors).
-    MunlockFailed {
-        errno: i32,
-    },
+    MunlockFailed { errno: i32 },
 
     /// Attempted to use an empty SecretBytes (len == 0).
     /// This indicates a programming error in the calling code.
@@ -113,10 +111,7 @@ pub enum MemoryError {
 
     /// The two values being compared have different lengths.
     /// Constant-time comparison requires equal lengths.
-    LengthMismatch {
-        expected: usize,
-        got: usize,
-    },
+    LengthMismatch { expected: usize, got: usize },
 }
 
 impl fmt::Display for MemoryError {
@@ -317,11 +312,7 @@ impl SecretBytes {
 
         // subtle::ConstantTimeEq returns a Choice (0 or 1) not a bool.
         // .into() converts Choice to bool.
-        let result: bool = self
-            .data
-            .0
-            .ct_eq(&other.data.0)
-            .into();
+        let result: bool = self.data.0.ct_eq(&other.data.0).into();
 
         Ok(result)
     }
@@ -501,20 +492,16 @@ fn secure_munlock(ptr: *const u8, len: usize) -> Result<(), MemoryError> {
 #[cfg(unix)]
 fn errno_to_string(errno: i32) -> String {
     match errno {
-        libc::EPERM => {
-            "Operation not permitted (EPERM). \
+        libc::EPERM => "Operation not permitted (EPERM). \
              The process does not have permission to lock this memory. \
              RLIMIT_MEMLOCK may be too low. \
              Run: ulimit -l unlimited"
-                .to_string()
-        }
-        libc::ENOMEM => {
-            "Not enough memory (ENOMEM). \
+            .to_string(),
+        libc::ENOMEM => "Not enough memory (ENOMEM). \
              Some of the specified address range does not correspond \
              to mapped pages in the address space. \
              Or the process's mlock limit has been reached."
-                .to_string()
-        }
+            .to_string(),
         libc::EINVAL => "Invalid argument (EINVAL). Address not page-aligned.".to_string(),
         _ => format!("OS error code {}", errno),
     }
@@ -585,10 +572,7 @@ pub type PanicSafeResult<T> = Result<T, Box<dyn std::any::Any + Send>>;
 /// does not run. Cargo.toml must have:
 ///   [profile.release]
 ///   panic = "unwind"
-pub fn catch_and_zero<F, T>(
-    f: F,
-    keys_to_zero_on_panic: Vec<&mut SecretBytes>,
-) -> Result<T, String>
+pub fn catch_and_zero<F, T>(f: F, keys_to_zero_on_panic: Vec<&mut SecretBytes>) -> Result<T, String>
 where
     F: FnOnce() -> Result<T, String> + std::panic::UnwindSafe,
 {
@@ -717,7 +701,7 @@ mod tests {
         // Must contain length info but NOT the actual bytes (0xFF)
         assert!(debug_str.contains("len: 32"));
         assert!(!debug_str.contains("255")); // 0xFF as decimal
-        assert!(!debug_str.contains("ff"));  // 0xFF as hex
+        assert!(!debug_str.contains("ff")); // 0xFF as hex
         assert!(!debug_str.contains("FF"));
     }
 
@@ -755,7 +739,10 @@ mod tests {
         let (b, _) = SecretBytes::new(vec![0x00u8; 16]).unwrap();
         let result = a.ct_eq(&b);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), MemoryError::LengthMismatch { .. }));
+        assert!(matches!(
+            result.unwrap_err(),
+            MemoryError::LengthMismatch { .. }
+        ));
     }
 
     #[test]
@@ -839,20 +826,15 @@ mod tests {
     #[test]
     fn test_catch_and_zero_returns_ok_on_success() {
         let (mut key, _) = SecretBytes::new(vec![0x01u8; 32]).unwrap();
-        let result = catch_and_zero(
-            || Ok(42u64),
-            vec![&mut key],
-        );
+        let result = catch_and_zero(|| Ok(42u64), vec![&mut key]);
         assert_eq!(result.unwrap(), 42u64);
     }
 
     #[test]
     fn test_catch_and_zero_returns_err_on_failure() {
         let (mut key, _) = SecretBytes::new(vec![0x01u8; 32]).unwrap();
-        let result: Result<u64, String> = catch_and_zero(
-            || Err("operation failed".to_string()),
-            vec![&mut key],
-        );
+        let result: Result<u64, String> =
+            catch_and_zero(|| Err("operation failed".to_string()), vec![&mut key]);
         assert!(result.is_err());
     }
 

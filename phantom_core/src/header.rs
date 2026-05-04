@@ -77,11 +77,7 @@ use sha2::Sha256;
 use subtle::ConstantTimeEq;
 
 use crate::crypto::{
-    generate_random_bytes,
-    Argon2Params,
-    CipherChoice,
-    CryptoError,
-    ARGON2_SALT_LEN,
+    generate_random_bytes, Argon2Params, CipherChoice, CryptoError, ARGON2_SALT_LEN,
 };
 use crate::memory::SecretBytes;
 
@@ -154,7 +150,11 @@ impl fmt::Display for HeaderError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             HeaderError::InvalidLength { got } => {
-                write!(f, "Header must be exactly {} bytes, got {}", HEADER_SIZE, got)
+                write!(
+                    f,
+                    "Header must be exactly {} bytes, got {}",
+                    HEADER_SIZE, got
+                )
             }
             HeaderError::InvalidMagic => {
                 write!(
@@ -178,13 +178,19 @@ impl fmt::Display for HeaderError {
                 write!(f, "Incorrect password or vault data is corrupted.")
             }
             HeaderError::WriteCounterOverflow => {
-                write!(f, "Write counter overflow. Vault has been used an extraordinary number of times.")
+                write!(
+                    f,
+                    "Write counter overflow. Vault has been used an extraordinary number of times."
+                )
             }
             HeaderError::CryptoError(e) => {
                 write!(f, "Cryptographic error: {}", e)
             }
             HeaderError::TimeError => {
-                write!(f, "Could not read system time for vault creation timestamp.")
+                write!(
+                    f,
+                    "Could not read system time for vault creation timestamp."
+                )
             }
         }
     }
@@ -312,21 +318,14 @@ impl VaultHeader {
     ///
     /// # Returns
     /// A fresh VaultHeader ready to be serialized after HMAC computation.
-    pub fn new(
-        cipher: CipherChoice,
-        argon2_params: Argon2Params,
-    ) -> Result<Self, HeaderError> {
-        let vault_id = generate_random_bytes::<16>()
-            .map_err(HeaderError::from)?;
+    pub fn new(cipher: CipherChoice, argon2_params: Argon2Params) -> Result<Self, HeaderError> {
+        let vault_id = generate_random_bytes::<16>().map_err(HeaderError::from)?;
 
-        let argon2_salt = generate_random_bytes::<ARGON2_SALT_LEN>()
-            .map_err(HeaderError::from)?;
+        let argon2_salt = generate_random_bytes::<ARGON2_SALT_LEN>().map_err(HeaderError::from)?;
 
-        let chacha20_nonce_base = generate_random_bytes::<24>()
-            .map_err(HeaderError::from)?;
+        let chacha20_nonce_base = generate_random_bytes::<24>().map_err(HeaderError::from)?;
 
-        let padding_seed = generate_random_bytes::<32>()
-            .map_err(HeaderError::from)?;
+        let padding_seed = generate_random_bytes::<32>().map_err(HeaderError::from)?;
 
         // Record creation timestamp.
         // This is informational only — never used in crypto.
@@ -370,19 +369,18 @@ impl VaultHeader {
     ///
     /// # Returns
     /// 32-byte HMAC value.
-    fn compute_hmac(
-        &self,
-        header_auth_key: &SecretBytes,
-    ) -> Result<[u8; HMAC_LEN], HeaderError> {
+    fn compute_hmac(&self, header_auth_key: &SecretBytes) -> Result<[u8; HMAC_LEN], HeaderError> {
         // Serialize the header to get the bytes to authenticate.
         // The HMAC covers bytes 0..HMAC_OFFSET (224 bytes).
         let serialized = self.serialize()?;
 
         // Create HMAC-SHA256 instance with the provided key.
-        let mut mac = <Hmac<Sha256>>::new_from_slice(header_auth_key.expose_secret())
-            .map_err(|_| HeaderError::CryptoError(CryptoError::HkdfFailed {
-                detail: "Invalid HMAC key length".to_string(),
-            }))?;
+        let mut mac =
+            <Hmac<Sha256>>::new_from_slice(header_auth_key.expose_secret()).map_err(|_| {
+                HeaderError::CryptoError(CryptoError::HkdfFailed {
+                    detail: "Invalid HMAC key length".to_string(),
+                })
+            })?;
 
         // Feed only the non-HMAC bytes (first 224 bytes).
         mac.update(&serialized[..HMAC_OFFSET]);
@@ -409,60 +407,59 @@ impl VaultHeader {
     }
 
     /// Verifies the HMAC against the raw 256-byte header bytes.
-///
-/// This method takes the original raw bytes rather than re-serializing
-/// from the struct. This ensures ALL bytes in the 0..224 range are
-/// authenticated — including padding bytes that are not stored in the
-/// struct fields. Re-serializing would silently re-zero any tampered
-/// padding bytes, making that tampering undetectable.
-///
-/// Uses constant-time comparison to prevent timing attacks.
-pub fn verify_hmac_raw(
-    &self,
-    raw_header_bytes: &[u8; HEADER_SIZE],
-    header_auth_key: &SecretBytes,
-) -> Result<(), HeaderError> {
-    // Compute HMAC over the first 224 bytes of the RAW on-disk bytes.
-    let mut mac = <Hmac<Sha256>>::new_from_slice(header_auth_key.expose_secret())
-        .map_err(|_| HeaderError::CryptoError(CryptoError::HkdfFailed {
-            detail: "Invalid HMAC key length".to_string(),
-        }))?;
+    ///
+    /// This method takes the original raw bytes rather than re-serializing
+    /// from the struct. This ensures ALL bytes in the 0..224 range are
+    /// authenticated — including padding bytes that are not stored in the
+    /// struct fields. Re-serializing would silently re-zero any tampered
+    /// padding bytes, making that tampering undetectable.
+    ///
+    /// Uses constant-time comparison to prevent timing attacks.
+    pub fn verify_hmac_raw(
+        &self,
+        raw_header_bytes: &[u8; HEADER_SIZE],
+        header_auth_key: &SecretBytes,
+    ) -> Result<(), HeaderError> {
+        // Compute HMAC over the first 224 bytes of the RAW on-disk bytes.
+        let mut mac =
+            <Hmac<Sha256>>::new_from_slice(header_auth_key.expose_secret()).map_err(|_| {
+                HeaderError::CryptoError(CryptoError::HkdfFailed {
+                    detail: "Invalid HMAC key length".to_string(),
+                })
+            })?;
 
-    mac.update(&raw_header_bytes[..HMAC_OFFSET]);
+        mac.update(&raw_header_bytes[..HMAC_OFFSET]);
 
-    let result = mac.finalize().into_bytes();
-    let mut computed = [0u8; HMAC_LEN];
-    computed.copy_from_slice(&result);
+        let result = mac.finalize().into_bytes();
+        let mut computed = [0u8; HMAC_LEN];
+        computed.copy_from_slice(&result);
 
-    // Constant-time comparison.
-    let matches: bool = computed.ct_eq(&self.header_hmac).into();
+        // Constant-time comparison.
+        let matches: bool = computed.ct_eq(&self.header_hmac).into();
 
-    if matches {
-        Ok(())
-    } else {
-        Err(HeaderError::HmacVerificationFailed)
+        if matches {
+            Ok(())
+        } else {
+            Err(HeaderError::HmacVerificationFailed)
+        }
     }
-}
 
-/// Verifies HMAC by re-serializing from the struct.
-///
-/// Use this only when you do not have the raw bytes available.
-/// Prefer verify_hmac_raw() when raw bytes are available because
-/// it catches tampering in padding regions that are not stored
-/// in the struct.
-pub fn verify_hmac(
-    &self,
-    header_auth_key: &SecretBytes,
-) -> Result<(), HeaderError> {
-    let computed = self.compute_hmac(header_auth_key)?;
-    let matches: bool = computed.ct_eq(&self.header_hmac).into();
+    /// Verifies HMAC by re-serializing from the struct.
+    ///
+    /// Use this only when you do not have the raw bytes available.
+    /// Prefer verify_hmac_raw() when raw bytes are available because
+    /// it catches tampering in padding regions that are not stored
+    /// in the struct.
+    pub fn verify_hmac(&self, header_auth_key: &SecretBytes) -> Result<(), HeaderError> {
+        let computed = self.compute_hmac(header_auth_key)?;
+        let matches: bool = computed.ct_eq(&self.header_hmac).into();
 
-    if matches {
-        Ok(())
-    } else {
-        Err(HeaderError::HmacVerificationFailed)
+        if matches {
+            Ok(())
+        } else {
+            Err(HeaderError::HmacVerificationFailed)
+        }
     }
-}
 
     // =========================================================================
     // WRITE COUNTER
@@ -595,9 +592,7 @@ pub fn verify_hmac(
         vault_id.copy_from_slice(&bytes[8..24]);
 
         // created_at (little-endian u64)
-        let created_at = u64::from_le_bytes(
-            bytes[24..32].try_into().unwrap()
-        );
+        let created_at = u64::from_le_bytes(bytes[24..32].try_into().unwrap());
 
         // cipher identifier
         let cipher_byte = bytes[32];
@@ -629,15 +624,13 @@ pub fn verify_hmac(
         chacha20_nonce_base.copy_from_slice(&bytes[84..108]);
 
         // write_counter (little-endian u64)
-        let write_counter = u64::from_le_bytes(
-            bytes[108..116].try_into().unwrap()
-        );
+        let write_counter = u64::from_le_bytes(bytes[108..116].try_into().unwrap());
 
         // Region layout
         let region_a_offset = u64::from_le_bytes(bytes[116..124].try_into().unwrap());
-        let region_a_len   = u64::from_le_bytes(bytes[124..132].try_into().unwrap());
+        let region_a_len = u64::from_le_bytes(bytes[124..132].try_into().unwrap());
         let region_b_offset = u64::from_le_bytes(bytes[132..140].try_into().unwrap());
-        let region_b_len   = u64::from_le_bytes(bytes[140..148].try_into().unwrap());
+        let region_b_len = u64::from_le_bytes(bytes[140..148].try_into().unwrap());
 
         let regions = RegionLayout {
             region_a_offset,
@@ -677,18 +670,13 @@ pub fn verify_hmac(
 mod tests {
     use super::*;
     use crate::crypto::{
-        derive_master_key, derive_subkey,
-        Argon2Params, CipherChoice, ARGON2_SALT_LEN,
+        derive_master_key, derive_subkey, Argon2Params, CipherChoice, ARGON2_SALT_LEN,
     };
     use crate::memory::SecretBytes;
 
     // Helper: create a fresh header with default secure params.
     fn make_test_header() -> VaultHeader {
-        VaultHeader::new(
-            CipherChoice::AesGcmSiv,
-            Argon2Params::default_secure(),
-        )
-        .unwrap()
+        VaultHeader::new(CipherChoice::AesGcmSiv, Argon2Params::default_secure()).unwrap()
     }
 
     // Helper: derive a header auth key from a test password.
@@ -697,12 +685,7 @@ mod tests {
         let salt = [0x42u8; ARGON2_SALT_LEN];
         let (pw, _) = SecretBytes::new(b"test_password".to_vec()).unwrap();
         let (master_key, _) = derive_master_key(pw, &salt, &params).unwrap();
-        let (header_key, _) = derive_subkey(
-            &master_key,
-            vault_id,
-            b"header-auth-key-v1",
-        )
-        .unwrap();
+        let (header_key, _) = derive_subkey(&master_key, vault_id, b"header-auth-key-v1").unwrap();
         header_key
     }
 
@@ -772,18 +755,9 @@ mod tests {
         assert_eq!(parsed.write_counter, original.write_counter);
         assert_eq!(parsed.padding_seed, original.padding_seed);
         assert_eq!(parsed.header_hmac, original.header_hmac);
-        assert_eq!(
-            parsed.argon2_params.t_cost,
-            original.argon2_params.t_cost
-        );
-        assert_eq!(
-            parsed.argon2_params.m_cost,
-            original.argon2_params.m_cost
-        );
-        assert_eq!(
-            parsed.argon2_params.p_cost,
-            original.argon2_params.p_cost
-        );
+        assert_eq!(parsed.argon2_params.t_cost, original.argon2_params.t_cost);
+        assert_eq!(parsed.argon2_params.m_cost, original.argon2_params.m_cost);
+        assert_eq!(parsed.argon2_params.p_cost, original.argon2_params.p_cost);
     }
 
     #[test]
@@ -802,11 +776,8 @@ mod tests {
 
     #[test]
     fn test_cipher_byte_aes_in_serialized_output() {
-        let header = VaultHeader::new(
-            CipherChoice::AesGcmSiv,
-            Argon2Params::default_secure(),
-        )
-        .unwrap();
+        let header =
+            VaultHeader::new(CipherChoice::AesGcmSiv, Argon2Params::default_secure()).unwrap();
         let bytes = header.serialize().unwrap();
         assert_eq!(bytes[32], 0x01);
     }
@@ -869,7 +840,10 @@ mod tests {
     #[test]
     fn test_deserialize_wrong_length_fails() {
         let result = VaultHeader::deserialize(&[0u8; 100]);
-        assert!(matches!(result, Err(HeaderError::InvalidLength { got: 100 })));
+        assert!(matches!(
+            result,
+            Err(HeaderError::InvalidLength { got: 100 })
+        ));
     }
 
     #[test]
@@ -976,7 +950,7 @@ mod tests {
         // Serialize, modify, deserialize, then verify.
         let mut bytes = header.serialize().unwrap();
         bytes[32] ^= 0x03; // Flip bits in cipher byte
-        bytes[32] = 0x02;  // Change to ChaCha20
+        bytes[32] = 0x02; // Change to ChaCha20
 
         // Parse the tampered bytes.
         let tampered = VaultHeader::deserialize(&bytes).unwrap();
@@ -1004,59 +978,58 @@ mod tests {
     }
 
     #[test]
-fn test_hmac_covers_all_header_bytes() {
-    // Verify that flipping ANY byte in positions 0..224 causes
-    // HMAC verification to fail. Uses verify_hmac_raw() which
-    // operates on the actual on-disk bytes rather than re-serializing,
-    // ensuring padding bytes (180..224) are also truly covered.
-    let mut header = make_test_header();
-    let vault_id = header.vault_id;
-    let key = make_test_header_key(&vault_id);
-    header.compute_and_store_hmac(&key).unwrap();
+    fn test_hmac_covers_all_header_bytes() {
+        // Verify that flipping ANY byte in positions 0..224 causes
+        // HMAC verification to fail. Uses verify_hmac_raw() which
+        // operates on the actual on-disk bytes rather than re-serializing,
+        // ensuring padding bytes (180..224) are also truly covered.
+        let mut header = make_test_header();
+        let vault_id = header.vault_id;
+        let key = make_test_header_key(&vault_id);
+        header.compute_and_store_hmac(&key).unwrap();
 
-    let original_bytes = header.serialize().unwrap();
+        let original_bytes = header.serialize().unwrap();
 
-    // Test positions across all meaningful regions of the header.
-    // Includes padding region (180, 200, 223) to verify raw-byte coverage.
-    let positions_to_test = [
-        0usize,  // magic
-        8,       // vault_id start
-        24,      // created_at
-        32,      // cipher byte
-        48,      // kdf byte
-        49,      // argon2_t start
-        61,      // argon2_salt start
-        84,      // nonce_base start
-        108,     // write_counter start
-        116,     // region_a_offset
-        148,     // padding_seed start
-        180,     // header_padding — only caught by verify_hmac_raw
-        200,     // header_padding middle
-        223,     // last byte before HMAC
-    ];
+        // Test positions across all meaningful regions of the header.
+        // Includes padding region (180, 200, 223) to verify raw-byte coverage.
+        let positions_to_test = [
+            0usize, // magic
+            8,      // vault_id start
+            24,     // created_at
+            32,     // cipher byte
+            48,     // kdf byte
+            49,     // argon2_t start
+            61,     // argon2_salt start
+            84,     // nonce_base start
+            108,    // write_counter start
+            116,    // region_a_offset
+            148,    // padding_seed start
+            180,    // header_padding — only caught by verify_hmac_raw
+            200,    // header_padding middle
+            223,    // last byte before HMAC
+        ];
 
-    for pos in &positions_to_test {
-        let mut tampered = original_bytes;
-        tampered[*pos] ^= 0xFF;
+        for pos in &positions_to_test {
+            let mut tampered = original_bytes;
+            tampered[*pos] ^= 0xFF;
 
-        // Some positions cause parse errors (magic, cipher, kdf params).
-        // Others will parse but must fail HMAC via raw verification.
-        match VaultHeader::deserialize(&tampered) {
-            Err(_) => {
-                // Parse error is correct — byte was in a validated field.
-            }
-            Ok(h) => {
-                // Must fail HMAC using raw bytes — catches padding tampering.
-                assert!(
-                    h.verify_hmac_raw(&tampered, &key).is_err(),
-                    "Tampering at byte {} was not detected by verify_hmac_raw",
-                    pos
-                );
+            // Some positions cause parse errors (magic, cipher, kdf params).
+            // Others will parse but must fail HMAC via raw verification.
+            match VaultHeader::deserialize(&tampered) {
+                Err(_) => {
+                    // Parse error is correct — byte was in a validated field.
+                }
+                Ok(h) => {
+                    // Must fail HMAC using raw bytes — catches padding tampering.
+                    assert!(
+                        h.verify_hmac_raw(&tampered, &key).is_err(),
+                        "Tampering at byte {} was not detected by verify_hmac_raw",
+                        pos
+                    );
+                }
             }
         }
     }
-}
-          
 
     #[test]
     fn test_hmac_is_deterministic() {
@@ -1134,7 +1107,7 @@ fn test_hmac_covers_all_header_bytes() {
         let layout = RegionLayout {
             region_a_offset: 256,
             region_a_len: 2048,
-            region_b_offset: 512,  // Starts inside region A.
+            region_b_offset: 512, // Starts inside region A.
             region_b_len: 1024,
         };
         assert!(!layout.validate());
@@ -1144,7 +1117,7 @@ fn test_hmac_covers_all_header_bytes() {
     fn test_region_layout_validate_zero_len_fails() {
         let layout = RegionLayout {
             region_a_offset: 256,
-            region_a_len: 0,  // Zero length is invalid.
+            region_a_len: 0, // Zero length is invalid.
             region_b_offset: 2048,
             region_b_len: 1024,
         };

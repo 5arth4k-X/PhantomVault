@@ -50,7 +50,10 @@ impl fmt::Display for HmacError {
                 write!(f, "HMAC key must be 32 bytes, got {}", got)
             }
             HmacError::VerificationFailed => {
-                write!(f, "HMAC verification failed — data may have been tampered with.")
+                write!(
+                    f,
+                    "HMAC verification failed — data may have been tampered with."
+                )
             }
             HmacError::EmptyData => {
                 write!(f, "Cannot compute HMAC of empty data.")
@@ -82,10 +85,7 @@ pub const HMAC_OUTPUT_LEN: usize = 32;
 ///
 /// # Returns
 /// 32-byte HMAC value.
-pub fn compute_hmac(
-    key: &SecretBytes,
-    data: &[u8],
-) -> Result<[u8; HMAC_OUTPUT_LEN], HmacError> {
+pub fn compute_hmac(key: &SecretBytes, data: &[u8]) -> Result<[u8; HMAC_OUTPUT_LEN], HmacError> {
     if data.is_empty() {
         return Err(HmacError::EmptyData);
     }

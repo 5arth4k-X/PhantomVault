@@ -33,8 +33,8 @@
 //
 // =============================================================================
 
-use std::fmt;
 use sharks::{Share, Sharks};
+use std::fmt;
 use zeroize::Zeroize;
 
 use crate::memory::SecretBytes;
@@ -91,10 +91,18 @@ impl fmt::Display for ShamirError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ShamirError::ThresholdTooLow { got } => {
-                write!(f, "Threshold must be at least {}, got {}", MIN_THRESHOLD, got)
+                write!(
+                    f,
+                    "Threshold must be at least {}, got {}",
+                    MIN_THRESHOLD, got
+                )
             }
             ShamirError::TooManyShares { got } => {
-                write!(f, "Cannot generate more than {} shares, got {}", MAX_SHARES, got)
+                write!(
+                    f,
+                    "Cannot generate more than {} shares, got {}",
+                    MAX_SHARES, got
+                )
             }
             ShamirError::ThresholdExceedsShares { threshold, shares } => {
                 write!(
@@ -104,11 +112,7 @@ impl fmt::Display for ShamirError {
                 )
             }
             ShamirError::InvalidSecretLength { expected, got } => {
-                write!(
-                    f,
-                    "Secret must be exactly {} bytes, got {}",
-                    expected, got
-                )
+                write!(f, "Secret must be exactly {} bytes, got {}", expected, got)
             }
             ShamirError::SelfTestFailed => {
                 write!(
@@ -360,8 +364,7 @@ fn reconstruct_from_raw_shares(
         .map(|s| Share::try_from(s.as_bytes()))
         .collect();
 
-    let shark_shares = shark_shares
-        .map_err(|_| ShamirError::ReconstructionFailed)?;
+    let shark_shares = shark_shares.map_err(|_| ShamirError::ReconstructionFailed)?;
 
     // Reconstruct the secret.
     let mut recovered = sharks
@@ -379,8 +382,7 @@ fn reconstruct_from_raw_shares(
     }
 
     // Wrap in SecretBytes.
-    let (secret, _) = SecretBytes::new(recovered)
-        .map_err(|_| ShamirError::ReconstructionFailed)?;
+    let (secret, _) = SecretBytes::new(recovered).map_err(|_| ShamirError::ReconstructionFailed)?;
 
     Ok(secret)
 }
@@ -407,24 +409,27 @@ mod tests {
     fn test_split_rejects_threshold_zero() {
         let secret = make_secret(0x42);
         let result = split_secret(&secret, 0, 5);
-        assert!(matches!(result, Err(ShamirError::ThresholdTooLow { got: 0 })));
+        assert!(matches!(
+            result,
+            Err(ShamirError::ThresholdTooLow { got: 0 })
+        ));
     }
 
     #[test]
     fn test_split_rejects_threshold_one() {
         let secret = make_secret(0x42);
         let result = split_secret(&secret, 1, 5);
-        assert!(matches!(result, Err(ShamirError::ThresholdTooLow { got: 1 })));
+        assert!(matches!(
+            result,
+            Err(ShamirError::ThresholdTooLow { got: 1 })
+        ));
     }
 
     #[test]
     fn test_split_rejects_too_many_shares() {
         let secret = make_secret(0x42);
         let result = split_secret(&secret, 2, MAX_SHARES + 1);
-        assert!(matches!(
-            result,
-            Err(ShamirError::TooManyShares { .. })
-        ));
+        assert!(matches!(result, Err(ShamirError::TooManyShares { .. })));
     }
 
     #[test]
@@ -446,7 +451,10 @@ mod tests {
         let result = split_secret(&short_secret, 2, 3);
         assert!(matches!(
             result,
-            Err(ShamirError::InvalidSecretLength { expected: 32, got: 16 })
+            Err(ShamirError::InvalidSecretLength {
+                expected: 32,
+                got: 16
+            })
         ));
     }
 
@@ -502,45 +510,27 @@ mod tests {
     fn test_reconstruct_2_of_3_with_shares_0_1() {
         let secret = make_secret(0xAA);
         let shares = split_secret(&secret, 2, 3).unwrap();
-        let two_shares = vec![
-            shares[0].clone(),
-            shares[1].clone(),
-        ];
+        let two_shares = vec![shares[0].clone(), shares[1].clone()];
         let reconstructed = reconstruct_secret(&two_shares, 2).unwrap();
-        assert_eq!(
-            reconstructed.expose_secret(),
-            secret.expose_secret()
-        );
+        assert_eq!(reconstructed.expose_secret(), secret.expose_secret());
     }
 
     #[test]
     fn test_reconstruct_2_of_3_with_shares_0_2() {
         let secret = make_secret(0xBB);
         let shares = split_secret(&secret, 2, 3).unwrap();
-        let two_shares = vec![
-            shares[0].clone(),
-            shares[2].clone(),
-        ];
+        let two_shares = vec![shares[0].clone(), shares[2].clone()];
         let reconstructed = reconstruct_secret(&two_shares, 2).unwrap();
-        assert_eq!(
-            reconstructed.expose_secret(),
-            secret.expose_secret()
-        );
+        assert_eq!(reconstructed.expose_secret(), secret.expose_secret());
     }
 
     #[test]
     fn test_reconstruct_2_of_3_with_shares_1_2() {
         let secret = make_secret(0xCC);
         let shares = split_secret(&secret, 2, 3).unwrap();
-        let two_shares = vec![
-            shares[1].clone(),
-            shares[2].clone(),
-        ];
+        let two_shares = vec![shares[1].clone(), shares[2].clone()];
         let reconstructed = reconstruct_secret(&two_shares, 2).unwrap();
-        assert_eq!(
-            reconstructed.expose_secret(),
-            secret.expose_secret()
-        );
+        assert_eq!(reconstructed.expose_secret(), secret.expose_secret());
     }
 
     #[test]
@@ -549,19 +539,10 @@ mod tests {
         let shares = split_secret(&secret, 3, 5).unwrap();
 
         // Try several combinations of 3.
-        let combos: &[&[usize]] = &[
-            &[0, 1, 2],
-            &[0, 1, 3],
-            &[0, 2, 4],
-            &[1, 3, 4],
-            &[2, 3, 4],
-        ];
+        let combos: &[&[usize]] = &[&[0, 1, 2], &[0, 1, 3], &[0, 2, 4], &[1, 3, 4], &[2, 3, 4]];
 
         for combo in combos {
-            let selected: Vec<ShamirShare> = combo
-                .iter()
-                .map(|&i| shares[i].clone())
-                .collect();
+            let selected: Vec<ShamirShare> = combo.iter().map(|&i| shares[i].clone()).collect();
 
             let reconstructed = reconstruct_secret(&selected, 3).unwrap();
             assert_eq!(
@@ -580,10 +561,7 @@ mod tests {
         // Using all 5 shares when threshold is 3 is fine.
         let all: Vec<ShamirShare> = shares.iter().map(|s| s.clone()).collect();
         let reconstructed = reconstruct_secret(&all, 3).unwrap();
-        assert_eq!(
-            reconstructed.expose_secret(),
-            secret.expose_secret()
-        );
+        assert_eq!(reconstructed.expose_secret(), secret.expose_secret());
     }
 
     #[test]
@@ -629,13 +607,9 @@ mod tests {
         // Verify by ensuring the returned shares actually reconstruct correctly.
         let secret = make_secret(0x42);
         let shares = split_secret(&secret, 3, 5).unwrap();
-        let first_three: Vec<ShamirShare> =
-            shares[..3].iter().map(|s| s.clone()).collect();
+        let first_three: Vec<ShamirShare> = shares[..3].iter().map(|s| s.clone()).collect();
         let reconstructed = reconstruct_secret(&first_three, 3).unwrap();
-        assert_eq!(
-            reconstructed.expose_secret(),
-            secret.expose_secret()
-        );
+        assert_eq!(reconstructed.expose_secret(), secret.expose_secret());
     }
 
     // -------------------------------------------------------------------------
@@ -647,12 +621,21 @@ mod tests {
         let errors = vec![
             ShamirError::ThresholdTooLow { got: 1 },
             ShamirError::TooManyShares { got: 11 },
-            ShamirError::ThresholdExceedsShares { threshold: 5, shares: 3 },
-            ShamirError::InvalidSecretLength { expected: 32, got: 16 },
+            ShamirError::ThresholdExceedsShares {
+                threshold: 5,
+                shares: 3,
+            },
+            ShamirError::InvalidSecretLength {
+                expected: 32,
+                got: 16,
+            },
             ShamirError::SelfTestFailed,
             ShamirError::InsufficientShares { needed: 3, got: 2 },
             ShamirError::ReconstructionFailed,
-            ShamirError::WrongReconstructedLength { expected: 32, got: 16 },
+            ShamirError::WrongReconstructedLength {
+                expected: 32,
+                got: 16,
+            },
             ShamirError::NoSharesProvided,
         ];
         for e in errors {

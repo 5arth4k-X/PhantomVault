@@ -144,10 +144,9 @@ pub fn read_password(prompt: &str) -> Result<(SecretBytes, MlockStatus), InputEr
     // Read from TTY directly via rpassword.
     // rpassword handles: disabling echo, reading until newline,
     // re-enabling echo, and clearing the terminal line.
-    let password_string = prompt_password(prompt)
-        .map_err(|e| InputError::ReadFailed {
-            detail: e.to_string(),
-        })?;
+    let password_string = prompt_password(prompt).map_err(|e| InputError::ReadFailed {
+        detail: e.to_string(),
+    })?;
 
     // Convert to bytes and validate before wrapping.
     let password_bytes = password_string.into_bytes();
@@ -176,12 +175,14 @@ pub fn read_password_twice(
     prompt_second: &str,
 ) -> Result<(SecretBytes, MlockStatus), InputError> {
     // Read first entry.
-    let first_string = prompt_password(prompt_first)
-        .map_err(|e| InputError::ReadFailed { detail: e.to_string() })?;
+    let first_string = prompt_password(prompt_first).map_err(|e| InputError::ReadFailed {
+        detail: e.to_string(),
+    })?;
 
     // Read second entry.
-    let second_string = prompt_password(prompt_second)
-        .map_err(|e| InputError::ReadFailed { detail: e.to_string() })?;
+    let second_string = prompt_password(prompt_second).map_err(|e| InputError::ReadFailed {
+        detail: e.to_string(),
+    })?;
 
     let first_bytes = first_string.into_bytes();
     let second_bytes = second_string.into_bytes();
@@ -246,8 +247,7 @@ fn validate_and_wrap(
         });
     }
 
-    let (secret, mlock_warning) = SecretBytes::new(password_bytes)
-        .map_err(InputError::from)?;
+    let (secret, mlock_warning) = SecretBytes::new(password_bytes).map_err(InputError::from)?;
 
     Ok((secret, MlockStatus::from(mlock_warning)))
 }
@@ -313,7 +313,10 @@ mod tests {
         let result = validate_and_wrap(long);
         assert!(matches!(
             result,
-            Err(InputError::PasswordTooLong { max: MAX_PASSWORD_LEN, got: _ })
+            Err(InputError::PasswordTooLong {
+                max: MAX_PASSWORD_LEN,
+                got: _
+            })
         ));
     }
 
@@ -420,10 +423,15 @@ mod tests {
     #[test]
     fn test_error_display_not_empty() {
         let errors = vec![
-            InputError::ReadFailed { detail: "io error".to_string() },
+            InputError::ReadFailed {
+                detail: "io error".to_string(),
+            },
             InputError::PasswordMismatch,
             InputError::EmptyPassword,
-            InputError::PasswordTooLong { max: 1024, got: 2000 },
+            InputError::PasswordTooLong {
+                max: 1024,
+                got: 2000,
+            },
         ];
         for e in errors {
             let msg = format!("{}", e);
@@ -451,10 +459,7 @@ mod tests {
     #[ignore]
     fn test_read_password_twice_matching() {
         // Run manually with matching inputs.
-        let result = read_password_twice(
-            "New password: ",
-            "Confirm password: ",
-        );
+        let result = read_password_twice("New password: ", "Confirm password: ");
         assert!(result.is_ok());
     }
 
@@ -462,10 +467,7 @@ mod tests {
     #[ignore]
     fn test_read_password_twice_mismatch() {
         // Run manually with mismatched inputs.
-        let result = read_password_twice(
-            "Password (type 'abc'): ",
-            "Confirm (type 'xyz'): ",
-        );
+        let result = read_password_twice("Password (type 'abc'): ", "Confirm (type 'xyz'): ");
         assert!(matches!(result, Err(InputError::PasswordMismatch)));
     }
 }
