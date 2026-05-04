@@ -34,8 +34,8 @@ Python never holds raw key bytes. Keys are derived, used, and zeroed entirely in
 ### From source
 
 ```bash
-git clone https://github.com/your-username/phantomvault
-cd phantomvault
+git clone https://github.com/5arth4k-X/PhantomVault
+cd PhantomVault
 bash scripts/setup.sh
 source .venv/bin/activate
 phantomvault --help
