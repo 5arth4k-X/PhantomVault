@@ -80,3 +80,23 @@ arising from use of this software.
 Users are solely responsible for determining the suitability of this
 software for their use case and for compliance with all applicable laws
 in their jurisdiction.
+
+## Known Dependency Vulnerabilities
+
+### CVE: Sharks — Polynomial Coefficient Bias (Moderate)
+
+**Component:** sharks crate (Shamir secret sharing)
+**Status:** Accepted for v1.0. Will be addressed in v1.5.
+**Impact in PhantomVault:** Minimal. The bias requires an attacker to observe
+multiple independent share generation sessions from the same secret. PhantomVault
+generates shares once per vault per user request. The recovery export feature
+is a stub in v1.0 and the full implementation in v1.5 will use a crate without
+this bias.
+
+### CVE: PyO3 — Buffer Overflow in PyString::from_object (Low)
+
+**Component:** pyo3 crate (Python FFI bridge)
+**Status:** Accepted for v1.0. Fix is to update pyo3 when a patched version ships.
+**Impact in PhantomVault:** Not exploitable. PhantomVault does not call
+PyString::from_object on untrusted input. All string data passed across the
+PyO3 boundary is either a fixed prompt string or a result from Rust operations.

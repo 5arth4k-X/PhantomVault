@@ -25,6 +25,19 @@ vulnerability = "deny"
 unmaintained = "warn"
 yanked = "deny"
 
+# Advisories reviewed and accepted for v1.0.
+# See docs/SECURITY.md for rationale on each.
+ignore = [
+    # sharks: polynomial coefficient bias.
+    # Not exploitable in PhantomVault's single-session usage model.
+    # Will be replaced in v1.5.
+    { id = "RUSTSEC-2024-0382", reason = "Not exploitable in single-session recovery model. Replacing in v1.5." },
+
+    # pyo3: PyString::from_object buffer overflow.
+    # PhantomVault does not call PyString::from_object on untrusted input.
+    { id = "RUSTSEC-2024-0373", reason = "Vulnerable function not called in PhantomVault code paths." },
+]
+
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"
