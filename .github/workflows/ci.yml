@@ -11,17 +11,21 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  test:
-    name: Rust Tests
+  # ── Rust TCB Tests ─────────────────────────────────────────────────────────
+  rust:
+    name: Rust TCB
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
-      - name: Cache cargo registry
+      - name: Cache Cargo
         uses: actions/cache@v4
         with:
           path: |
@@ -29,36 +33,55 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
-      - name: cargo fmt check
+      - name: cargo fmt
         run: cargo fmt --manifest-path phantom_core/Cargo.toml -- --check
 
       - name: cargo clippy
         run: cargo clippy --manifest-path phantom_core/Cargo.toml -- -D warnings
 
-      - name: cargo test (unit)
-        run: cargo test --manifest-path phantom_core/Cargo.toml -- --test-threads=1
+      - name: cargo check
+        run: cargo check --manifest-path phantom_core/Cargo.toml
 
-      - name: cargo test (integration)
-        run: cargo test --manifest-path phantom_core/Cargo.toml --test integration_test -- --test-threads=1
+      - name: Unit tests
+        run: |
+          cargo test --manifest-path phantom_core/Cargo.toml \
+            -- --test-threads=1
+        timeout-minutes: 15
 
-      - name: cargo deny
-        uses: EmbarkStudios/cargo-deny-action@v1
-        with:
-          manifest-path: phantom_core/Cargo.toml
+      - name: Integration tests
+        run: |
+          cargo test --manifest-path phantom_core/Cargo.toml \
+            --test integration_test -- --test-threads=1
+        timeout-minutes: 15
 
+  # ── Python Build ────────────────────────────────────────────────────────────
   python:
-    name: Python Build and Import
+    name: Python Build
     runs-on: ubuntu-latest
-    needs: test
+    needs: rust
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Set up Python
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -66,10 +89,40 @@ jobs:
       - name: Install maturin
         run: pip install maturin==1.7.4
 
-      - name: Build Python extension
-        run: maturin build --manifest-path phantom_core/Cargo.toml
+      - name: Build wheel
+        run: |
+          maturin build \
+            --manifest-path phantom_core/Cargo.toml \
+            --interpreter python3.11
 
-      - name: Install and verify
+      - name: Install wheel and verify
         run: |
           pip install target/wheels/*.whl
-          python3 -c "from phantomvault import phantom_core; print('OK:', dir(phantom_core))"
+          python3 -c "
+          from phantomvault import phantom_core
+          fns = [f for f in dir(phantom_core) if not f.startswith('_')]
+          print('Functions exported:', len(fns))
+          assert len(fns) == 12, f'Expected 12 functions, got {len(fns)}'
+          print('All OK')
+          "
+
+  # ── Dependency Audit ────────────────────────────────────────────────────────
+  audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+
+      - name: cargo deny check licenses
+        run: cargo deny check licenses --manifest-path phantom_core/Cargo.toml
+
+      - name: cargo deny check bans
+        run: cargo deny check bans --manifest-path phantom_core/Cargo.toml
