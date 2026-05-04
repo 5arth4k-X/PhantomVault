@@ -1,0 +1,38 @@
+[package]
+name = "phantom_core"
+version = "1.0.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "PhantomVault cryptographic core — Trusted Computing Base"
+publish = false
+
+[lib]
+name = "phantom_core"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+pyo3 = { version = "0.21", features = ["extension-module", "abi3-py311"] }
+
+aes-gcm-siv = "0.11"
+chacha20poly1305 = "0.10"
+
+argon2 = "0.5"
+hkdf = "0.12"
+sha2 = "0.10"
+hmac = "0.12"
+
+zeroize = { version = "1.7", features = ["derive"] }
+subtle = "2.5"
+
+sharks = "0.5"
+rpassword = "7.3"
+getrandom = "0.2"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+hex = "0.4"
+
+[features]
+default = []

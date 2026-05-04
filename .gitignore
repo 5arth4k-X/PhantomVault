@@ -1,0 +1,39 @@
+# Rust build artifacts
+target/
+
+# Python virtual environment
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.so
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+*.whl
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# PhantomVault — NEVER commit these
+*.vault
+*.enc
+*.key
+phantomvault_test/
+~/.phantomvault/
+
+# Fuzz corpus (large, regenerated)
+phantom_core/fuzz/corpus/
+phantom_core/fuzz/artifacts/
+
+# Misc
+git_structure.txt

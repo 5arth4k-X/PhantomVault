@@ -1,0 +1,36 @@
+[package]
+name = "phantom_core-fuzz"
+version = "0.0.1"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+phantom_core = { path = ".." }
+
+[[bin]]
+name = "fuzz_crypto"
+path = "src/fuzz_crypto.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_header"
+path = "src/fuzz_header.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_shamir"
+path = "src/fuzz_shamir.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_hmac"
+path = "src/fuzz_hmac.rs"
+test = false
+doc = false
