@@ -16,6 +16,12 @@ unused-allowed-license = "allow"
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
+# windows-sys has two versions pulled in transitively by rpassword.
+# This is a transitive dependency conflict we cannot resolve without
+# forking rpassword. Skipping the duplicate warning for this crate.
+skip = [
+    { name = "windows-sys", reason = "rpassword pulls two versions transitively" },
+]
 
 [advisories]
 db-path = "~/.cargo/advisory-db"
