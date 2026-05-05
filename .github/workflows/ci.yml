@@ -9,9 +9,11 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  CARGO_HOME: /home/runner/.cargo
+  CARGO_INCREMENTAL: 0
 
 jobs:
-  # ── Rust TCB Tests ─────────────────────────────────────────────────────────
+  # ── Rust TCB ─────────────────────────────────────────────────────────────────
   rust:
     name: Rust TCB
     runs-on: ubuntu-latest
@@ -25,21 +27,22 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      - name: Cache Cargo
+      - name: Cache Cargo registry and target
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-${{ hashFiles('phantom_core/Cargo.lock', 'Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: cargo fmt
-        run: cargo fmt --manifest-path phantom_core/Cargo.toml -- --check
+      - name: cargo fmt check
+        working-directory: phantom_core
+        run: cargo fmt -- --check
 
-      - name: cargo clippy
+      - name: cargo clippy (zero warnings)
         run: cargo clippy --manifest-path phantom_core/Cargo.toml -- -D warnings
 
       - name: cargo check
@@ -57,7 +60,7 @@ jobs:
             --test integration_test -- --test-threads=1
         timeout-minutes: 15
 
-  # ── Python Build ────────────────────────────────────────────────────────────
+  # ── Python build and import ───────────────────────────────────────────────────
   python:
     name: Python Build
     runs-on: ubuntu-latest
@@ -70,14 +73,14 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache Cargo
+      - name: Cache Cargo registry and target
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-${{ hashFiles('phantom_core/Cargo.lock', 'Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
 
@@ -87,26 +90,46 @@ jobs:
           python-version: '3.11'
 
       - name: Install maturin
-        run: pip install maturin==1.7.4
+        run: pip install "maturin==1.7.4"
 
       - name: Build wheel
         run: |
           maturin build \
             --manifest-path phantom_core/Cargo.toml \
-            --interpreter python3.11
+            --out dist/
 
-      - name: Install wheel and verify
+      - name: Install wheel
+        run: pip install dist/*.whl
+
+      - name: Verify import (run from /tmp to avoid local source shadowing)
+        # IMPORTANT: Must cd away from repo root before importing.
+        # If Python is invoked from ~/phantomvault/, it finds the local
+        # phantomvault/ directory before the installed wheel, so
+        # phantom_core.abi3.so is never found and import fails.
+        # Running from /tmp forces Python to use the installed package.
         run: |
-          pip install target/wheels/*.whl
-          python3 -c "
+          cd /tmp
+          python3 - << 'PYEOF'
           from phantomvault import phantom_core
           fns = [f for f in dir(phantom_core) if not f.startswith('_')]
-          print('Functions exported:', len(fns))
-          assert len(fns) == 12, f'Expected 12 functions, got {len(fns)}'
-          print('All OK')
-          "
+          print('Exported functions:', fns)
+          expected = {
+              'chain_hmac', 'compute_hmac', 'create_vault', 'decrypt_data',
+              'encrypt_data', 'lock_all_sessions', 'lock_session',
+              'random_bytes', 'session_active', 'shamir_reconstruct',
+              'shamir_split', 'unlock_vault',
+          }
+          missing = expected - set(fns)
+          extra = set(fns) - expected
+          if missing:
+              print('MISSING functions:', missing)
+              raise SystemExit(1)
+          if extra:
+              print('UNEXPECTED functions:', extra)
+          print(f'OK — {len(fns)} functions exported, all expected ones present')
+          PYEOF
 
-  # ── Dependency Audit ────────────────────────────────────────────────────────
+  # ── Dependency licence audit ──────────────────────────────────────────────────
   audit:
     name: Dependency Audit
     runs-on: ubuntu-latest
@@ -121,8 +144,16 @@ jobs:
       - name: Install cargo-deny
         run: cargo install cargo-deny --locked
 
-      - name: cargo deny check licenses
-        run: cargo deny check licenses --manifest-path phantom_core/Cargo.toml
+      - name: cargo deny — licences
+        # --manifest-path is a flag on `cargo deny` itself, before `check`
+        run: cargo deny --manifest-path phantom_core/Cargo.toml check licenses
 
-      - name: cargo deny check bans
-        run: cargo deny check bans --manifest-path phantom_core/Cargo.toml
+      - name: cargo deny — banned crates
+        run: cargo deny --manifest-path phantom_core/Cargo.toml check bans
+
+      - name: cargo deny — advisories
+        # Advisories documented in deny.toml [advisories.ignore] with rationale
+        run: cargo deny --manifest-path phantom_core/Cargo.toml check advisories
+        continue-on-error: true
+        # continue-on-error because the advisory DB may have new entries
+        # between releases. Failures are reviewed manually.
