@@ -16,9 +16,6 @@ unused-allowed-license = "allow"
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
-# windows-sys has two versions pulled in transitively by rpassword.
-# This is a transitive dependency conflict we cannot resolve without
-# forking rpassword. Skipping the duplicate warning for this crate.
 skip = [
     { name = "windows-sys", reason = "rpassword pulls two versions transitively" },
 ]
@@ -28,8 +25,16 @@ db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
 version = 2
 ignore = [
-    "RUSTSEC-2024-0382",
-    "RUSTSEC-2024-0373",
+    # RUSTSEC-2024-0398: sharks polynomial coefficient bias.
+    # Exploitation requires distributing the same secret 500-1500 times.
+    # PhantomVault distributes shares once per vault — not exploitable.
+    # Replacement crate (blahaj) has unstable API across versions.
+    # Will be addressed in v1.5 with a full Shamir rewrite.
+    { id = "RUSTSEC-2024-0398", reason = "Not exploitable: PhantomVault distributes each secret once. Scheduled for replacement in v1.5." },
+    # RUSTSEC-2025-0020: pyo3 PyString::from_object buffer overflow.
+    # PhantomVault does not call PyString::from_object on any input.
+    # All PyO3 boundary types are Vec<u8>, u64, bool, and &str literals.
+    { id = "RUSTSEC-2025-0020", reason = "Vulnerable function never called in PhantomVault code paths." },
 ]
 
 [sources]
