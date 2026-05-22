@@ -1,42 +1,36 @@
 # Contributing to PhantomVault
 
-Thank you for your interest in contributing.
+Thank you for your interest.
 
-## Before You Start
+---
 
-Read [docs/SECURITY.md](docs/SECURITY.md) and [docs/AUDIT_PLAN.md](docs/AUDIT_PLAN.md).
-Understand the distinction between the TCB and the orchestration layer before making any changes.
+## Read This First
 
-## The Two Categories of Contribution
+Before making any change, understand the two-layer architecture:
 
-### Changes to phantom_core/src/ — Security Critical
+- **`phantom_core/src/`** — The Rust Trusted Computing Base. A bug here is a security vulnerability.
+- **`phantomvault/`** — The Python orchestration layer. A bug here is a UX defect.
 
-Any change to the six TCB files (memory.rs, crypto.rs, header.rs, input.rs, hmac.rs, shamir.rs) is a potential security change. These require:
+Read [docs/SECURITY.md](docs/SECURITY.md) and [docs/AUDIT_PLAN.md](docs/AUDIT_PLAN.md) before touching `phantom_core`.
 
-- A clear description of what security property the change affects
-- All existing tests continuing to pass
-- New tests covering the changed behaviour
-- Zero clippy warnings with `-D warnings`
-- A justification for any use of `unsafe`
-
-Do not change cryptographic primitives, key sizes, KDF parameters, or the vault format without opening a discussion issue first.
-
-### Changes to phantomvault/ — Orchestration Layer
-
-Python changes to the CLI, vault lifecycle, stealth, or container handling are UX changes. They still require passing tests and clean linting, but do not require the security justification that TCB changes do.
+---
 
 ## Development Setup
 
 ```bash
+git clone https://github.com/5arth4k-X/PhantomVault
+cd PhantomVault
 bash scripts/setup.sh
 source .venv/bin/activate
 bash scripts/check_env.sh
 ```
 
+---
+
 ## Running Tests
 
 ```bash
-# Rust unit tests
+# Rust unit tests (runs Argon2id — takes a few minutes)
 cargo test --manifest-path phantom_core/Cargo.toml -- --test-threads=1
 
 # Integration tests
@@ -44,18 +38,68 @@ cargo test --manifest-path phantom_core/Cargo.toml --test integration_test -- --
 
 # Linting — zero warnings required
 cargo clippy --manifest-path phantom_core/Cargo.toml -- -D warnings
+
+# Dependency audit
+cargo deny --manifest-path phantom_core/Cargo.toml check
 ```
+
+---
+
+## Two Types of Contribution
+
+### Changes to `phantom_core/src/` — Security Critical
+
+Any change to the six TCB files requires:
+
+- [ ] Clear description of which security property the change affects
+- [ ] All existing tests still pass
+- [ ] New tests covering the changed behaviour
+- [ ] Zero clippy warnings (`-D warnings`)
+- [ ] Justification for any use of `unsafe`
+
+> [!WARNING]
+> Do not change cryptographic primitives, key sizes, KDF parameters, or the vault binary format without opening a discussion issue first.
+
+### Changes to `phantomvault/` — Orchestration Layer
+
+Python changes to the CLI, vault lifecycle, stealth, or container handling require:
+
+- [ ] Tests pass
+- [ ] No new imports that cross the key boundary
+- [ ] `ruff` and `black` formatting pass
+
+---
 
 ## Pull Request Requirements
 
-- All tests pass
-- `cargo clippy -- -D warnings` produces zero output
+- All CI checks pass (Rust tests, clippy, dependency audit, Python build)
 - Commit messages follow the format: `type(scope): description`
-  Examples: `fix(crypto): correct nonce construction for ChaCha20`
-  `feat(cli): add about command`
-  `docs(security): update hibernation limitation`
-- One logical change per pull request
+
+### Commit Types
+
+| Type | When to use |
+|---|---|
+| `feat` | New feature |
+| `fix` | Bug fix |
+| `security` | Security fix — use for any TCB change |
+| `docs` | Documentation only |
+| `test` | Adding or fixing tests |
+| `ci` | CI/CD workflow changes |
+| `chore` | Maintenance, version bumps, dependency updates |
+
+### Examples
+
+```bash
+fix(crypto): correct nonce construction for ChaCha20
+feat(cli): add about command
+security(header): verify HMAC using raw bytes not re-serialised struct
+docs(threat-model): add T3.5 OS compromise tier
+test(shamir): add edge case for threshold equals total shares
+```
+
+---
 
 ## Reporting Security Issues
 
-Do not open a public issue for security vulnerabilities. See [SECURITY.md](SECURITY.md).
+> [!CAUTION]
+> Do **not** open a public issue for security vulnerabilities.See [SECURITY.md](SECURITY.md) for the private disclosure process.

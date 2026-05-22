@@ -1,21 +1,31 @@
-# PhantomVault Versioning Strategy
+# PhantomVault — Versioning Strategy
 
-## Version format
+## Version Format
 
-MAJOR.MINOR.PATCH following Semantic Versioning.
+`MAJOR.MINOR.PATCH` following [Semantic Versioning](https://semver.org/).
 
-- MAJOR: Vault format incompatible change. Old vaults cannot be opened.
-- MINOR: New features, backward compatible. Old vaults still open.
-- PATCH: Bug fixes and security patches. No behaviour change.
+| Increment | When | Old vaults |
+|---|---|---|
+| `MAJOR` | Vault binary format incompatible change | Cannot be opened — migration tool provided |
+| `MINOR` | New features, backward compatible | Still open correctly |
+| `PATCH` | Bug fixes and security patches | No behaviour change |
 
-## Branch strategy
-main        — release branch. Only tagged releases. Always passes CI.
-develop     — active development. PRs merge here first.
-feature/*   — individual feature branches, merge into develop.
-hotfix/*    — critical fixes, merge into main directly, then back-merge to develop.
-## How to release a new version
+---
 
-Step 1 — Update version numbers in three files:
+## Branch Strategy
+
+| Branch | Purpose | Rules |
+|---|---|---|
+| `main` | Releases only | Always passes CI. No direct commits. |
+| `develop` | Active development | All PRs merge here first |
+| `feature/*` | Individual features | Branch from develop, merge back to develop |
+| `hotfix/*` | Critical security fixes | Branch from main, merge to main then back-merge to develop |
+
+---
+
+## How to Release a New Version
+
+### Step 1 — Update version numbers (three files)
 
 ```bash
 # phantom_core/Cargo.toml
@@ -28,37 +38,82 @@ version = "1.0.1"
 __version__ = "1.0.1"
 ```
 
-Step 2 — Update CHANGELOG.md. Move items from [Unreleased] to a new dated section.
+### Step 2 — Update CHANGELOG.md
 
-Step 3 — Commit the version bump:
+Move items from `[Unreleased]` to a new dated section:
 
-```bash
-git add -A
-git commit -m "chore: release v1.0.1"
+```markdown
+## [1.0.1] — 2026-MM-DD
+
+### Fixed
+- Description of what was fixed
 ```
 
-Step 4 — Tag the release:
+### Step 3 — Run full test suite
 
 ```bash
-git tag -a v1.0.1 -m "Release v1.0.1 — brief description of what changed"
+cargo test --manifest-path phantom_core/Cargo.toml -- --test-threads=1
+cargo clippy --manifest-path phantom_core/Cargo.toml -- -D warnings
+cargo deny --manifest-path phantom_core/Cargo.toml check
+```
+
+All checks must pass before tagging.
+
+### Step 4 — Commit and tag
+
+```bash
+git add phantom_core/Cargo.toml pyproject.toml phantomvault/__init__.py CHANGELOG.md
+git commit -m "chore: release v1.0.1"
+git tag -a v1.0.1 -m "Release v1.0.1 — brief description"
 git push origin main
 git push origin v1.0.1
 ```
 
-Step 5 — GitHub automatically runs CI on the tag. After CI passes, create a GitHub Release from the tag in the GitHub UI.
+### Step 5 — Create GitHub Release
 
-## Vault format versioning
+After CI passes on the tag, go to GitHub → Releases → Create release from tag.
+Copy the CHANGELOG entry for this version into the release notes.
 
-The vault container format is versioned separately from the software version. The magic bytes in the header contain the format version: `PHVLT100` means PhantomVault format 1.0.0.
+---
 
-If the vault format ever changes in a way that requires re-encryption of existing vaults, the magic bytes change (`PHVLT200`) and a migration tool is provided. Software version and format version are independent.
+## Vault Format Versioning
 
-## Security patch process
+The vault container format is versioned **independently** from the software version.
 
-If a security vulnerability is discovered:
+The magic bytes in the header encode the format version:
 
-1. Fix is developed in a private branch.
-2. CI runs on the fix privately.
-3. Coordinated disclosure happens.
-4. Fix is merged, PATCH version bumped, release tagged.
-5. SECURITY.md updated with the CVE if one is assigned.
+| Magic bytes | Format version |
+|---|---|
+| `PHVLT100` | v1.0 — current |
+| `PHVLT200` | v2.0 — future |
+
+If the vault format ever changes in a way that requires re-encryption of existing vaults:
+- Magic bytes change to `PHVLT200`
+- A migration tool is provided that opens v1.0 vaults and re-encrypts them as v2.0
+- Software version and format version are always independent
+
+---
+
+## Security Patch Process
+
+When a security vulnerability is discovered and confirmed:
+
+1. Fix is developed in a **private** branch
+2. CI runs on the fix privately before disclosure
+3. Coordinated disclosure with the reporter
+4. Fix merged, PATCH version bumped, release tagged
+5. `SECURITY.md` and `docs/SECURITY.md` updated with CVE if assigned
+6. `deny.toml` advisory ignore list updated if needed
+7. Release notes explicitly mention the security fix
+
+---
+
+## Dependency Update Policy
+
+| Dependency type | Update frequency | Review required |
+|---|---|---|
+| Security patch | Immediately on advisory | Manual code review |
+| Minor version | Monthly | Check changelog |
+| Major version | Evaluate per release | Full review + tests |
+
+Run `cargo deny check advisories` after every dependency update before pushing.

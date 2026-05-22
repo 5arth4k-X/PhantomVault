@@ -1,57 +1,79 @@
 # Changelog
 
 All notable changes to PhantomVault are documented here.
-Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
-Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
+Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
+
+---
+
+## [Unreleased] — v1.5
+
+### Planned
+- macOS and Windows support
+- TOTP second factor (pyotp)
+- FIDO2 / YubiKey second factor (python-fido2)
+- Two-process watchdog daemon (watcher + watchdog via Unix socket)
+- HMAC-chained audit log with remote anchoring
+- Shamir recovery export with BIP-39 word encoding
+- Remote attestation — nonce-based challenge-response
+
+---
 
 ## [1.0.0] — 2026-05-03
 
-### Added
-- Rust Trusted Computing Base (phantom_core) — 6 files, ~2000 lines
-- AES-256-GCM-SIV primary encryption (nonce-misuse-resistant)
-- ChaCha20-Poly1305 alternative encryption for platforms without AES-NI
-- Argon2id key derivation with enforced minimums (t≥3, m≥64MB, p≥4)
-- HKDF-SHA256 session key derivation (no timestamp, CSPRNG nonce only)
-- HMAC-SHA256 authenticated 256-byte vault header
-- Two independent encrypted storage compartments per vault
-- Shamir secret sharing with mandatory self-test on export
-- Rust TTY password reading via rpassword (Python never holds password)
-- SecretBytes type — mlock'd, ZeroizeOnDrop, constant-time comparison
-- catch_unwind wrapping all TCB entry points
-- Portable container backend (Linux, no root required)
-- Ghost directory stealth — source directory left empty when locked
-- Poisson-distributed dummy I/O for access pattern obfuscation
-- mtime randomisation ±72 hours on all vault operations
-- Hibernation detection and warning at startup
-- Typer/Rich CLI with create, unlock, lock, remove, status, panic, about
-- HMAC-chained audit log infrastructure
-- Session handle system — opaque integer handles, keys never cross FFI
-- Vault alias system — names map to container paths
-- 144 unit tests + 9 integration tests
-- 4 fuzz targets (crypto, header, shamir, hmac)
-- Complete documentation: VAULT_FORMAT_v1.md, THREAT_MODEL.md, SECURITY.md, AUDIT_PLAN.md
+### Rust Trusted Computing Base (`phantom_core`)
 
-### Security properties
-- Keys zero on lock (ZeroizeOnDrop + explicit zero_now)
-- Keys zero on panic (catch_unwind + ZeroOnDrop guard)
-- Keys mlock'd — not swappable when RLIMIT_MEMLOCK is unlimited
-- Header tamper detection including padding bytes (verify_hmac_raw)
-- KDF parameter minimums enforced — downgrade attacks rejected
-- Constant-time HMAC comparison via subtle crate
+- `memory.rs` — `SecretBytes` type: mlock, ZeroizeOnDrop, constant-time comparison, catch_unwind
+- `crypto.rs` — AES-256-GCM-SIV (nonce-misuse-resistant), ChaCha20-Poly1305, Argon2id (enforced minimums), HKDF-SHA256
+- `header.rs` — 256-byte authenticated vault header, HMAC-SHA256, downgrade-resistant KDF enforcement
+- `input.rs` — Rust TTY password reading via rpassword (Python never holds the password)
+- `hmac.rs` — HMAC-SHA256 audit chain with chained entries (deletion detectable)
+- `shamir.rs` — Shamir secret sharing via sharks crate with mandatory self-test on every export
+- `lib.rs` — PyO3 exports using opaque session handles — no key material crosses the FFI boundary
 
-### Known limitations in v1.0
-- Linux only (macOS and Windows in v1.5)
-- Filesystem journal may retain pre-vault filenames
-- Hibernation writes RAM to disk (warned, documented)
-- No TOTP or FIDO2 second factor (v1.5)
-- No remote attestation (v1.5)
-- No TPM hardware binding (v2.0)
+### Python Orchestration Layer
 
-## [Unreleased] — v1.5 planned
+- `cli.py` — Typer/Rich CLI: create, unlock, lock, remove, status, panic, about, version
+- `vault.py` — Vault lifecycle management with alias system
+- `stealth.py` — Secure file deletion (random rename chains), mtime randomisation ±72 hours
+- `vault_region.py` — Two independent encrypted compartments accessible with separate passwords
+- `container/portable.py` — Container file backend: CSPRNG-padded binary container
+- `obfuscation.py` — Poisson-distributed dummy I/O (statistically indistinguishable from human access)
+- `hibernation.py` — Startup hibernation detection and warning
+- `modes.py` — Security mode detection (SECURE / KERNEL / PORTABLE)
+- `utils/aliases.py` — Vault name to container path mapping
+- `utils/warnings.py` — Rich-formatted security warnings
 
-- macOS and Windows support
-- TOTP second factor
-- Two-process watchdog daemon
-- HMAC audit log with remote anchoring
-- Shamir recovery export with BIP-39 word encoding
-- Remote attestation with nonce-based challenge-response
+### Security Properties Implemented
+
+- Keys zero on lock via `ZeroizeOnDrop` and explicit `zero_now()`
+- Keys zero on panic via `catch_unwind` with `ZeroOnDrop` guard
+- Keys mlock'd — not swappable when `RLIMIT_MEMLOCK = unlimited`
+- Header tamper detection including padding bytes (`verify_hmac_raw`)
+- KDF parameter minimums enforced in code — downgrade attacks rejected at parse time
+- Constant-time HMAC comparison via `subtle` crate
+
+### Testing
+
+- 144 unit tests across all 6 TCB modules
+- 9 integration tests covering full vault lifecycle
+- 4 fuzz targets: fuzz_crypto, fuzz_header, fuzz_shamir, fuzz_hmac
+
+### Documentation
+
+- `docs/VAULT_FORMAT_v1.md` — Complete binary format specification
+- `docs/THREAT_MODEL.md` — T1 through T4 attacker tiers with honest capabilities
+- `docs/SECURITY.md` — Cryptographic design, known limitations, legal disclaimer
+- `docs/AUDIT_PLAN.md` — TCB definition, testing strategy, external review roadmap
+- `docs/VERSIONING.md` — Release process and vault format versioning
+
+### Known Limitations in v1.0
+
+- Linux only — macOS and Windows in v1.5
+- Filesystem journal may retain pre-vault filenames — use fresh volumes for maximum stealth
+- Hibernation writes RAM to disk — warned at startup, disable for maximum security
+- No TOTP or FIDO2 second factor — v1.5
+- No remote attestation — v1.5
+- No TPM hardware binding — v2.0
+- Shamir recovery export is a stub — full implementation in v1.5
