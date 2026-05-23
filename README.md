@@ -191,9 +191,10 @@ Every vault is a single binary file:
 
 [0    - 255 ]  256-byte authenticated header (HMAC-SHA256)
 [256 - EOF  ]  CSPRNG random padding + two encrypted vault regions
-The complete binary format specification is in [docs/VAULT_FORMAT_v1.md](docs/VAULT_FORMAT_v1.md).
 
 ```
+The complete binary format specification is in [docs/VAULT_FORMAT_v1.md](docs/VAULT_FORMAT_v1.md).
+
 ---
 
 ## How Keys Work
