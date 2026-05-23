@@ -179,17 +179,21 @@ PhantomVault
 ├── shamir.rs          Shamir secret sharing with mandatory self-test
 └── lib.rs             PyO3 exports — opaque session handles only
 ```
-**The boundary is strict.** Python sends plaintext and receives ciphertext. Python sends ciphertext and receives plaintext. Session keys never cross the boundary — Python holds only an opaque integer handle.
+**The boundary is strict.** Python sends plaintext and receives ciphertext. Python sends ciphertext and receives plaintext. Session keys never cross the boundary. Python holds only an opaque integer handle.
 
 ---
 
 ## Vault File Format
 
 Every vault is a single binary file:
+
+```
+
 [0    - 255 ]  256-byte authenticated header (HMAC-SHA256)
 [256 - EOF  ]  CSPRNG random padding + two encrypted vault regions
 The complete binary format specification is in [docs/VAULT_FORMAT_v1.md](docs/VAULT_FORMAT_v1.md).
 
+```
 ---
 
 ## How Keys Work
@@ -214,7 +218,7 @@ AES-256-GCM-SIV encrypt/decrypt using session_key
 │
 ▼
 vault locked → session_key zeroed → handle invalidated
----
+
 ```
 
 ## Threat Model Summary
@@ -253,7 +257,7 @@ phantomvault/     Python orchestration — UX and file management, not crypto
 docs/             Security documentation and format specifications
 scripts/          Setup and environment verification
 .github/          CI workflows
----
+
 ```
 
 ## Contributing
