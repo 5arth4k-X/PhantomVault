@@ -155,6 +155,8 @@ phantomvault create big-vault ~/Videos --size 500 --cipher chacha
 ---
 
 ## Architecture
+
+```
 PhantomVault
 ├── phantomvault/              Python orchestration layer
 │   ├── cli.py                 Typer/Rich command-line interface
@@ -176,7 +178,7 @@ PhantomVault
 ├── hmac.rs            HMAC-SHA256 audit chain
 ├── shamir.rs          Shamir secret sharing with mandatory self-test
 └── lib.rs             PyO3 exports — opaque session handles only
-
+```
 **The boundary is strict.** Python sends plaintext and receives ciphertext. Python sends ciphertext and receives plaintext. Session keys never cross the boundary — Python holds only an opaque integer handle.
 
 ---
@@ -192,6 +194,7 @@ The complete binary format specification is in [docs/VAULT_FORMAT_v1.md](docs/VA
 
 ## How Keys Work
 
+```
 User types password
 │  (stays in terminal TTY — Rust reads it directly)
 ▼
@@ -212,6 +215,7 @@ AES-256-GCM-SIV encrypt/decrypt using session_key
 ▼
 vault locked → session_key zeroed → handle invalidated
 ---
+```
 
 ## Threat Model Summary
 
@@ -242,12 +246,15 @@ Full list in [docs/SECURITY.md](docs/SECURITY.md).
 ---
 
 ## Repository Structure
+
+```
 phantom_core/     Rust TCB — the ONLY security-critical audit target
 phantomvault/     Python orchestration — UX and file management, not crypto
 docs/             Security documentation and format specifications
 scripts/          Setup and environment verification
 .github/          CI workflows
 ---
+```
 
 ## Contributing
 
