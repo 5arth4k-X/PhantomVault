@@ -67,7 +67,7 @@ class PortableContainer:
 
         with open(self.path, "wb") as f:
             # Write the authenticated header.
-            f.write(header_bytes)
+            f.write(bytes(header_bytes))
 
             # Fill remainder with CSPRNG random bytes.
             # Written in chunks to avoid large memory allocation.
@@ -75,7 +75,7 @@ class PortableContainer:
             chunk_size = 64 * 1024  # 64 KB chunks
             while remaining > 0:
                 write_size = min(chunk_size, remaining)
-                f.write(phantom_core.random_bytes(write_size))
+                f.write(bytes(phantom_core.random_bytes(write_size)))
                 remaining -= write_size
 
         # Set restrictive permissions: owner read/write only.

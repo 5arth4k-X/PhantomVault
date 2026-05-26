@@ -1,8 +1,7 @@
 """
 PhantomVault — utils/aliases.py
-Maps vault alias names to container file paths.
-Stored in a simple JSON file. Not sensitive — paths are not secrets,
-but the file location is kept in the user's home directory.
+Maps vault alias names to container file paths and metadata.
+Stored as JSON in ~/.phantomvault/vaults.json.
 """
 
 import json
@@ -12,47 +11,101 @@ from typing import Optional
 
 
 def _alias_file() -> Path:
-    """Returns the path to the alias store file."""
     base = Path.home() / ".phantomvault"
     base.mkdir(mode=0o700, exist_ok=True)
     return base / "vaults.json"
 
 
 def _load() -> dict:
-    """Loads the alias store. Returns empty dict if file does not exist."""
     f = _alias_file()
     if not f.exists():
         return {}
     try:
-        with open(f, "r") as fh:
-            return json.load(fh)
+        return json.loads(f.read_text())
     except (json.JSONDecodeError, OSError):
         return {}
 
 
 def _save(data: dict) -> None:
-    """Saves the alias store atomically."""
     f = _alias_file()
     tmp = f.with_suffix(".tmp")
-    with open(tmp, "w") as fh:
-        json.dump(data, fh, indent=2)
+    tmp.write_text(json.dumps(data, indent=2))
     tmp.replace(f)
 
 
-def register(alias: str, container_path: str) -> None:
-    """Register a vault alias pointing to a container file path."""
+def register(
+    alias: str,
+    container_path: str,
+    source_path: str = "",
+    region_offset: int = 0,
+    region_len: int = 0,
+) -> None:
+    """Register a vault alias with all metadata needed for unlock."""
     data = _load()
-    data[alias] = str(container_path)
+    data[alias] = {
+        "container": str(container_path),
+        "source": str(source_path),
+        "region_offset": region_offset,
+        "region_len": region_len,
+    }
     _save(data)
 
 
 def resolve(alias: str) -> Optional[str]:
-    """Resolve an alias to its container path. Returns None if not found."""
-    return _load().get(alias)
+    """Resolve alias to container path. Returns None if not found."""
+    entry = _load().get(alias)
+    if entry is None:
+        return None
+    if isinstance(entry, dict):
+        return entry.get("container")
+    return str(entry)  # backward compat with old string-only format
+
+
+def resolve_full(alias: str) -> Optional[dict]:
+    """Resolve alias to full metadata dict."""
+    entry = _load().get(alias)
+    if entry is None:
+        return None
+    if isinstance(entry, dict):
+        return entry
+    # Backward compat: old format was just a string path
+    return {"container": str(entry), "source": "", "region_offset": 0, "region_len": 0}
+
+
+def update_region(alias: str, region_offset: int, region_len: int) -> None:
+    """Update the stored region offset and length after writing encrypted data."""
+    data = _load()
+    if alias in data and isinstance(data[alias], dict):
+        data[alias]["region_offset"] = region_offset
+        data[alias]["region_len"] = region_len
+        _save(data)
+
+
+def mark_open(alias: str) -> None:
+    """Mark a vault as currently open (survives across process restarts)."""
+    data = _load()
+    if alias in data and isinstance(data[alias], dict):
+        data[alias]["open"] = True
+        _save(data)
+
+
+def mark_locked(alias: str) -> None:
+    """Mark a vault as locked."""
+    data = _load()
+    if alias in data and isinstance(data[alias], dict):
+        data[alias]["open"] = False
+        _save(data)
+
+
+def is_open(alias: str) -> bool:
+    """Returns True if the vault is currently marked as open."""
+    entry = _load().get(alias)
+    if isinstance(entry, dict):
+        return bool(entry.get("open", False))
+    return False
 
 
 def remove(alias: str) -> bool:
-    """Remove an alias. Returns True if it existed."""
     data = _load()
     if alias not in data:
         return False
@@ -62,10 +115,8 @@ def remove(alias: str) -> bool:
 
 
 def list_all() -> dict:
-    """Return all alias -> path mappings."""
     return _load()
 
 
 def alias_exists(alias: str) -> bool:
-    """Returns True if the alias is registered."""
     return alias in _load()
