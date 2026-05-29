@@ -209,7 +209,7 @@ Argon2id(password, salt, t=3, m=64MB, p=4)
 master_key (32 bytes, mlock'd in Rust memory)
 │  password zeroed immediately after this step
 ▼
-HKDF-SHA256(master_key, vault_id, session_nonce)
+HKDF-SHA256(master_key, vault_id, "vault-data-key-v1")
 │  master_key zeroed immediately after this step
 ▼
 session_key (32 bytes, mlock'd in Rust memory)
